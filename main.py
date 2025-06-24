@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 import sys
+import threading
 import time
-import csv
-import argparse
 from datetime import datetime
 
 import serial
@@ -12,100 +10,60 @@ from code.conn.detector import (
     MultipleArduinoPortsFoundError,
 )
 
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Read from one or more Arduinos and optionally log to CSV"
-    )
-    p.add_argument(
-        "--csv", action="store_true",
-        help="Enable CSV logging of (epoch, port, reading)"
-    )
-    p.add_argument(
-        "--csvfile", type=str, default=None,
-        help="Path to CSV file (defaults to readings_<timestamp>.csv)"
-    )
-    p.add_argument(
-        "--baud", type=int, default=9600,
-        help="Serial baud rate"
-    )
-    p.add_argument(
-        "--timeout", type=float, default=1.0,
-        help="Serial read timeout (seconds)"
-    )
-    return p.parse_args()
+POLL_INTERVAL = 0.01  
 
-def open_ports(ports, baud, timeout):
-    conns = []
-    for port in ports:
+class VernierFSRLogger:
+    def __init__(self, baud=9600, timeout=1.0):
         try:
-            ser = serial.Serial(port, baudrate=baud, timeout=timeout)
-            time.sleep(2)
-            ser.reset_input_buffer()
-            conns.append((port, ser))
-            print(f"✔ Connected to {port}")
-        except serial.SerialException as e:
-            print(f"✖ Failed to connect {port}: {e}", file=sys.stderr)
-    return conns
+            p = find_arduino_ports()
+        except ArduinoNotFoundError:
+            sys.exit("No Arduino found. Plug it in and try again.")
+        except MultipleArduinoPortsFoundError as e:
+            sys.exit(f"Multiple Arduinos found: {e.ports!r}")
+        self.port = p if isinstance(p, str) else p[0]
+        print(f"→ Opening {self.port} @ {baud} baud")
+        self.ser = serial.Serial(self.port, baudrate=baud, timeout=timeout)
+        time.sleep(2)               # let Arduino reboot
+        self.ser.reset_input_buffer()
+        self.is_logging = False
 
-def main():
-    args = parse_args()
+    def start_logging(self):
+        """Tell the Arduino to start sending data."""
+        if not self.is_logging:
+            self.ser.write(b's')
+            self.is_logging = True
 
-    try:
-        found = find_arduino_ports()
-    except ArduinoNotFoundError:
-        print("❌ No Arduino found. Is it plugged in?", file=sys.stderr)
-        sys.exit(1)
-    except MultipleArduinoPortsFoundError as e:
-        print("⚠️  Multiple Arduinos detected:", e.ports)
-        ports = e.ports
-    else:
-        ports = [found] if isinstance(found, str) else found
+    def stop_logging(self):
+        """Tell the Arduino to stop sending data."""
+        if self.is_logging:
+            self.ser.write(b'e')
+            self.is_logging = False
 
-    print(f"→ Using ports: {ports}")
-
-    conns = open_ports(ports, args.baud, args.timeout)
-    if not conns:
-        print("❌ No serial connections could be opened.", file=sys.stderr)
-        sys.exit(1)
-
-    csv_writer = None
-    csv_file = None
-    if args.csv:
-        fname = args.csvfile or f"readings_{datetime.now():%Y%m%d_%H%M%S}.csv"
-        csv_file = open(fname, "w", newline="")
-        writer = csv.writer(csv_file)
-        writer.writerow(["epoch", "port", "reading"])
-        csv_writer = writer
-        print(f"📝 Logging to CSV: {fname}")
-
-    try:
-        print("🔄 Starting read loop (Ctrl+C to stop)…")
+    def _reader_loop(self):
+        """Continuously read lines from Arduino and print them."""
         while True:
-            for port, ser in conns:
-                line = ser.readline().decode("utf-8", errors="ignore").strip()
-                if not line:
-                    continue
+            line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+            if line:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] {line}")
 
-                epoch = time.time()
-                timestamp = datetime.fromtimestamp(epoch).isoformat()
-                output = f"[{timestamp}] {port} → {line}"
-                print(output)
+    def run(self):
+        t = threading.Thread(target=self._reader_loop, daemon=True)
+        t.start()
 
-                if csv_writer:
-                    csv_writer.writerow([epoch, port, line])
-                    csv_file.flush()
-
-            time.sleep(0.01)
-
-    except KeyboardInterrupt:
-        print("\n🛑  Stopped by user")
-
-    finally:
-        for _, ser in conns:
-            ser.close()
-        if csv_file:
-            csv_file.close()
-        print("🔌  All connections closed.")
+        self.start_logging()
+        print("▶Logging started automatically. Type 'e' + ↵ to STOP, Ctrl+C to quit.")
+        
+        try:
+            while True:
+                cmd = sys.stdin.readline().strip().lower()
+                if cmd == 'e':
+                    self.stop_logging()
+                time.sleep(POLL_INTERVAL)
+        except KeyboardInterrupt:
+            print("\n⚡ Exiting…")
+        finally:
+            self.ser.close()
 
 if __name__ == "__main__":
-    main()
+    logger = VernierFSRLogger(baud=9600, timeout=1.0)
+    logger.run()
