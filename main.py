@@ -5,6 +5,7 @@ import csv
 import argparse
 import re
 from datetime import datetime
+from pathlib import Path
 
 import serial
 from code.conn.detector import (
@@ -145,13 +146,27 @@ def parse_args():
         "--timeout", type=float, default=1.0,
         help="Serial read timeout (seconds)"
     )
+    parser.add_argument(
+        "--name", type=str, default=None,
+        help="Experiment name. Files will be saved under hta/<name>/"
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
     logger = VernierFSRLogger(baud=args.baud, timeout=args.timeout)
     logger.run_for(duration_seconds=args.duration, start_delay=args.delay)
+
     if args.csv:
-        logger.save_to_csv()
-        logger.save_clean_csv()
+        raw_file = None
+        clean_file = None
+        if args.name:
+            base_dir = Path("hta") / args.name
+            base_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            raw_file = base_dir / f"{args.name}_raw_{ts}.csv"
+            clean_file = base_dir / f"{args.name}_clean_{ts}.csv"
+
+        logger.save_to_csv(filename=str(raw_file) if raw_file else None)
+        logger.save_clean_csv(filename=str(clean_file) if clean_file else None)
 

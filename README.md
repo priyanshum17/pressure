@@ -42,14 +42,17 @@ python3 main.py --csv --delay 5 --duration 60
 | `--duration` | Duration (in seconds) to log data        | `30`    |
 | `--baud`     | Baud rate for serial connection          | `9600`  |
 | `--timeout`  | Timeout for serial reads                 | `1.0`   |
+| `--name`     | Name of experiment; files saved to `hta/<name>/` | `None` |
 
 
 ## 📁 Output
 
-If `--csv` is used, two files will be saved:
+If `--csv` is used, two files will be saved. Without `--name` they are
+named `vernier_log_YYYYMMDD_HHMMSS.csv` and `vernier_clean_YYYYMMDD_HHMMSS.csv`.
+When `--name <exp>` is provided, files are stored in `hta/<exp>/` as
+`<exp>_raw_<timestamp>.csv` and `<exp>_clean_<timestamp>.csv`.
 
-* `vernier_log_YYYYMMDD_HHMMSS.csv` — raw lines from serial monitor (with timestamps)
-* `vernier_clean_YYYYMMDD_HHMMSS.csv` — structured data with:
+The clean CSV has the following format:
 
 ```csv
 Time(s),Force(N),DeltaF(N),FSR1,FSR2,FSR3
