@@ -1,8 +1,0 @@
-timestamped_line
-"[13:37:02] Ready. Type 's' to start logging, 'e' to stop."
-[13:37:02] Sensor Info:
-[13:37:02] Sensor ID: 0
-[13:37:02] Sensor Name:
-[13:37:02] Units:
-[13:37:04] ▶️ START LOGGING
-"[13:37:04] Time(s), Force(N), DeltaF(N), FSR1, FSR2, FSR3"
