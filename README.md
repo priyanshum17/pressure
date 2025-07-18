@@ -83,6 +83,3 @@ Press `Ctrl+C` at any time to manually stop logging early.
 ## Contact
 
 For bugs or feature requests, open an issue or reach out to the author.
-
-```
-
